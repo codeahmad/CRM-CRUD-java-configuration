@@ -1,6 +1,8 @@
 package com.code.SpringMvcHibernateJavaCrm.Configuration;
 
+import java.beans.PropertyVetoException;
 import java.util.Properties;
+import java.util.logging.Logger;
 
 import javax.sql.DataSource;
 
@@ -9,6 +11,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.PropertySource;
+import org.springframework.core.env.Environment;
 import org.springframework.dao.annotation.PersistenceExceptionTranslationPostProcessor;
 import org.springframework.orm.hibernate5.HibernateTransactionManager;
 import org.springframework.orm.hibernate5.LocalSessionFactoryBean;
@@ -23,7 +27,22 @@ import com.mchange.v2.c3p0.ComboPooledDataSource;
 @EnableWebMvc
 @EnableTransactionManagement
 @ComponentScan(basePackages = "com.code.SpringMvcHibernateJavaCrm")
+@PropertySource("classpath:properties-file.properties")
 public class JavaServletConfiguration {
+
+	// Adding environment variable to hold properties
+	@Autowired
+	private Environment env;
+
+	// Adding logger for for debugging
+	Logger logger = Logger.getLogger(getClass().getName());
+
+	// Adding convenient method to convert String to int
+	public int getIntMethod(String s) {
+		String envString = env.getProperty(s);
+		int result = Integer.parseInt(envString);
+		return result;
+	}
 
 	// Adding view resolver
 	@Bean
@@ -33,8 +52,8 @@ public class JavaServletConfiguration {
 		InternalResourceViewResolver viewResolver = new InternalResourceViewResolver();
 
 		// Setting properties
-		viewResolver.setPrefix("/WEB-INF/views/");
-		viewResolver.setSuffix(".jsp");
+		viewResolver.setPrefix(env.getProperty("prefix"));
+		viewResolver.setSuffix(env.getProperty("suffix"));
 
 		// Returning ViewResolver object
 		return viewResolver;
@@ -48,28 +67,32 @@ public class JavaServletConfiguration {
 		ComboPooledDataSource dataSource = new ComboPooledDataSource();
 
 		// Setting properties database connection properties
-		dataSource.setJdbcUrl("jdbc:mysql://localhost:3306/customer_database?useSSL=false&serverTimeZone=UTC");
-		dataSource.setUser("crmDatabase");
-		dataSource.setPassword("Root@2012");
+		dataSource.setJdbcUrl(env.getProperty("jdbc.url"));
+		dataSource.setUser(env.getProperty("jdbc.user"));
+		dataSource.setPassword(env.getProperty("jdbc.password"));
 
-		//
+		// Printing connection properties to console for testing
+		logger.info("===user" + env.getProperty("jdbc.user"));
+		logger.info("===url" + env.getProperty("jdbc.url"));
+		logger.info("===password" + env.getProperty("jdbc.password"));
+
 		try {
 			dataSource.setDriverClass("com.mysql.jdbc.Driver");
-		} catch (Exception exc) {
-			exc.printStackTrace();
+		} catch (PropertyVetoException e) {
+			throw new RuntimeException(e);
 		}
 
 		// Adding connection pool properties
-		dataSource.setInitialPoolSize(5);
-		dataSource.setMinPoolSize(5);
-		dataSource.setMaxPoolSize(20);
-		dataSource.setMaxIdleTime(3000);
+		dataSource.setInitialPoolSize(getIntMethod("connection.pool.initialPoolSize"));
+		dataSource.setMinPoolSize(getIntMethod("connection.pool.minPoolSize"));
+		dataSource.setMaxPoolSize(getIntMethod("connection.pool.maxPoolSize"));
+		dataSource.setMaxIdleTime(getIntMethod("connection.pool.maxIdleTime"));
 
 		// Returning DataSource object
 		return dataSource;
 	}
 
-	// Setting hibernate properties 
+	// Setting hibernate properties
 	@Bean
 	public PersistenceExceptionTranslationPostProcessor exceptionTranslation() {
 		return new PersistenceExceptionTranslationPostProcessor();
@@ -78,27 +101,26 @@ public class JavaServletConfiguration {
 	Properties hibernateProperties() {
 		return new Properties() {
 			{
-				setProperty("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
-				setProperty("hibernate.show_sql", "true");
+				setProperty("hibernate.dialect", env.getProperty("hibernate.dialect"));
+				setProperty("hibernate.show_sql", env.getProperty("hibernate.show_sql"));
 
 			}
 		};
 	}
 
-	
 	// Creating session factory
 	@Bean
 	public LocalSessionFactoryBean factory() {
 
 		// Creating instance of session factory class
 		LocalSessionFactoryBean factory = new LocalSessionFactoryBean();
-		
+
 		// Adding entity scan package
 		factory.setPackagesToScan("com.code.SpringMvcHibernateJavaCrm.Entity");
-		
+
 		// Injecting data source
 		factory.setDataSource(dataSource());
-		
+
 		// Injecting hibernate properties
 		factory.setHibernateProperties(hibernateProperties());
 
@@ -110,11 +132,11 @@ public class JavaServletConfiguration {
 	@Bean
 	@Autowired
 	public HibernateTransactionManager transactionManager(SessionFactory factory) {
-		
+
 		// Creating instance of transaction manager class
- 		HibernateTransactionManager transactionManager = new HibernateTransactionManager();
- 		
- 		// Injecting session factory
+		HibernateTransactionManager transactionManager = new HibernateTransactionManager();
+
+		// Injecting session factory
 		transactionManager.setSessionFactory(factory);
 
 		// Return transaction manager object
